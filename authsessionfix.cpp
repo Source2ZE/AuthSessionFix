@@ -25,16 +25,6 @@
 #include <funchook.h>
 class GameSessionConfiguration_t { };
 
-SH_DECL_HOOK3_void(IServerGameDLL, GameFrame, SH_NOATTRIB, 0, bool, bool, bool);
-SH_DECL_HOOK4_void(IServerGameClients, ClientActive, SH_NOATTRIB, 0, CPlayerSlot, bool, const char *, uint64);
-SH_DECL_HOOK5_void(IServerGameClients, ClientDisconnect, SH_NOATTRIB, 0, CPlayerSlot, ENetworkDisconnectionReason, const char *, uint64, const char *);
-SH_DECL_HOOK4_void(IServerGameClients, ClientPutInServer, SH_NOATTRIB, 0, CPlayerSlot, char const *, int, uint64);
-SH_DECL_HOOK1_void(IServerGameClients, ClientSettingsChanged, SH_NOATTRIB, 0, CPlayerSlot );
-SH_DECL_HOOK6_void(IServerGameClients, OnClientConnected, SH_NOATTRIB, 0, CPlayerSlot, const char*, uint64, const char *, const char *, bool);
-SH_DECL_HOOK6(IServerGameClients, ClientConnect, SH_NOATTRIB, 0, bool, CPlayerSlot, const char*, uint64, const char *, bool, CBufferString *);
-SH_DECL_HOOK2(IGameEventManager2, FireEvent, SH_NOATTRIB, 0, bool, IGameEvent *, bool);
-SH_DECL_HOOK3_void(INetworkServerService, StartupServer, SH_NOATTRIB, 0, const GameSessionConfiguration_t&, ISource2WorldSession*, const char*);
-SH_DECL_HOOK2_void( IServerGameClients, ClientCommand, SH_NOATTRIB, 0, CPlayerSlot, const CCommand & );
 SH_DECL_HOOK0_void(IServerGameDLL, GameServerSteamAPIActivated, SH_NOATTRIB, 0);
 SH_DECL_HOOK0_void(IServerGameDLL, GameServerSteamAPIDeactivated, SH_NOATTRIB, 0);
 
@@ -54,10 +44,6 @@ SH_DECL_MANUALHOOK2_void(MHook_DisconnectClient, 68, 0, 0, void*, int);
 
 
 AuthSessionFix g_AuthSessionFix;
-IServerGameDLL *server = NULL;
-IServerGameClients *gameclients = NULL;
-IVEngineServer *engine = NULL;
-IGameEventManager2 *gameevents = NULL;
 ICvar *icvar = NULL;
 CSteamGameServerAPIContext g_steamAPI;
 void Hook_NotifyClientDisconnect(void* steam3server, void* serverSideClient);
@@ -66,47 +52,18 @@ typedef void (*NotifyClientDisconnect_t)(void* steam3server, void* serverSideCli
 NotifyClientDisconnect_t g_pNotifyClientDisconnect = nullptr;
 funchook_t* g_hook = nullptr;
 
-// Should only be called within the active game loop (i e map should be loaded and active)
-// otherwise that'll be nullptr!
-CGlobalVars *GetGameGlobals()
-{
-	INetworkGameServer *server = g_pNetworkServerService->GetIGameServer();
-
-	if(!server)
-		return nullptr;
-
-	return g_pNetworkServerService->GetIGameServer()->GetGlobals();
-}
-
 PLUGIN_EXPOSE(AuthSessionFix, g_AuthSessionFix);
 bool AuthSessionFix::Load(PluginId id, ISmmAPI *ismm, char *error, size_t maxlen, bool late)
 {
 	PLUGIN_SAVEVARS();
 
-	GET_V_IFACE_CURRENT(GetEngineFactory, engine, IVEngineServer, INTERFACEVERSION_VENGINESERVER);
 	GET_V_IFACE_CURRENT(GetEngineFactory, icvar, ICvar, CVAR_INTERFACE_VERSION);
-	GET_V_IFACE_ANY(GetServerFactory, server, IServerGameDLL, INTERFACEVERSION_SERVERGAMEDLL);
-	GET_V_IFACE_ANY(GetServerFactory, gameclients, IServerGameClients, INTERFACEVERSION_SERVERGAMECLIENTS);
-	GET_V_IFACE_ANY(GetEngineFactory, g_pNetworkServerService, INetworkServerService, NETWORKSERVERSERVICE_INTERFACE_VERSION);
 	GET_V_IFACE_ANY(GetServerFactory, g_pSource2Server, ISource2Server, SOURCE2SERVER_INTERFACE_VERSION);
 
-	// Currently doesn't work from within mm side, use GetGameGlobals() in the mean time instead
-	// gpGlobals = ismm->GetCGlobals();
-
-	// Required to get the IMetamodListener events
 	g_SMAPI->AddListener( this, this );
 
 	META_CONPRINTF( "Starting plugin.\n" );
 
-	SH_ADD_HOOK(IServerGameDLL, GameFrame, server, SH_MEMBER(this, &AuthSessionFix::Hook_GameFrame), true);
-	SH_ADD_HOOK(IServerGameClients, ClientActive, gameclients, SH_MEMBER(this, &AuthSessionFix::Hook_ClientActive), true);
-	SH_ADD_HOOK(IServerGameClients, ClientDisconnect, gameclients, SH_MEMBER(this, &AuthSessionFix::Hook_ClientDisconnect), true);
-	SH_ADD_HOOK(IServerGameClients, ClientPutInServer, gameclients, SH_MEMBER(this, &AuthSessionFix::Hook_ClientPutInServer), true);
-	SH_ADD_HOOK(IServerGameClients, ClientSettingsChanged, gameclients, SH_MEMBER(this, &AuthSessionFix::Hook_ClientSettingsChanged), false);
-	SH_ADD_HOOK(IServerGameClients, OnClientConnected, gameclients, SH_MEMBER(this, &AuthSessionFix::Hook_OnClientConnected), false);
-	SH_ADD_HOOK(IServerGameClients, ClientConnect, gameclients, SH_MEMBER(this, &AuthSessionFix::Hook_ClientConnect), false);
-	SH_ADD_HOOK(IServerGameClients, ClientCommand, gameclients, SH_MEMBER(this, &AuthSessionFix::Hook_ClientCommand), false);
-	SH_ADD_HOOK(INetworkServerService, StartupServer, g_pNetworkServerService, SH_MEMBER(this, &AuthSessionFix::Hook_StartupServer), true);
 	SH_ADD_HOOK(IServerGameDLL, GameServerSteamAPIActivated, g_pSource2Server, SH_MEMBER(this, &AuthSessionFix::Hook_GameServerSteamAPIActivated), false);
 	SH_ADD_HOOK(IServerGameDLL, GameServerSteamAPIDeactivated, g_pSource2Server, SH_MEMBER(this, &AuthSessionFix::Hook_GameServerSteamAPIDeactivated), false);
 
@@ -139,15 +96,6 @@ bool AuthSessionFix::Load(PluginId id, ISmmAPI *ismm, char *error, size_t maxlen
 
 bool AuthSessionFix::Unload(char *error, size_t maxlen)
 {
-	SH_REMOVE_HOOK(IServerGameDLL, GameFrame, server, SH_MEMBER(this, &AuthSessionFix::Hook_GameFrame), true);
-	SH_REMOVE_HOOK(IServerGameClients, ClientActive, gameclients, SH_MEMBER(this, &AuthSessionFix::Hook_ClientActive), true);
-	SH_REMOVE_HOOK(IServerGameClients, ClientDisconnect, gameclients, SH_MEMBER(this, &AuthSessionFix::Hook_ClientDisconnect), true);
-	SH_REMOVE_HOOK(IServerGameClients, ClientPutInServer, gameclients, SH_MEMBER(this, &AuthSessionFix::Hook_ClientPutInServer), true);
-	SH_REMOVE_HOOK(IServerGameClients, ClientSettingsChanged, gameclients, SH_MEMBER(this, &AuthSessionFix::Hook_ClientSettingsChanged), false);
-	SH_REMOVE_HOOK(IServerGameClients, OnClientConnected, gameclients, SH_MEMBER(this, &AuthSessionFix::Hook_OnClientConnected), false);
-	SH_REMOVE_HOOK(IServerGameClients, ClientConnect, gameclients, SH_MEMBER(this, &AuthSessionFix::Hook_ClientConnect), false);
-	SH_REMOVE_HOOK(IServerGameClients, ClientCommand, gameclients, SH_MEMBER(this, &AuthSessionFix::Hook_ClientCommand), false);
-	SH_REMOVE_HOOK(INetworkServerService, StartupServer, g_pNetworkServerService, SH_MEMBER(this, &AuthSessionFix::Hook_StartupServer), true);
 	SH_REMOVE_HOOK(IServerGameDLL, GameServerSteamAPIActivated, g_pSource2Server, SH_MEMBER(this, &AuthSessionFix::Hook_GameServerSteamAPIActivated), false);
 	SH_REMOVE_HOOK(IServerGameDLL, GameServerSteamAPIDeactivated, g_pSource2Server, SH_MEMBER(this, &AuthSessionFix::Hook_GameServerSteamAPIDeactivated), false);
 
@@ -179,9 +127,6 @@ void Hook_NotifyClientDisconnect(void* steam3server, void* serverSideClient)
 
 void AuthSessionFix::AllPluginsLoaded()
 {
-	/* This is where we'd do stuff that relies on the mod or other plugins
-	 * being initialized (for example, cvars added and events registered).
-	 */
 }
 
 void AuthSessionFix::Hook_GameServerSteamAPIActivated()
@@ -193,73 +138,17 @@ void AuthSessionFix::Hook_GameServerSteamAPIDeactivated()
 {
 }
 
-void AuthSessionFix::Hook_StartupServer(const GameSessionConfiguration_t& config, ISource2WorldSession*, const char*)
+void AuthSessionFix::OnLevelInit(char const* pMapName,
+	char const* pMapEntities,
+	char const* pOldLevel,
+	char const* pLandmarkName,
+	bool loadGame,
+	bool background)
 {
-	auto pNetworkGameServer = g_pNetworkServerService->GetIGameServer();
-	ConMsg("fdsfds %p\n", pNetworkGameServer);
-	//SH_ADD_MANUALHOOK(MHook_DisconnectClient, pNetworkGameServer, SH_MEMBER(this, &AuthSessionFix::Hook_DisconnectClient), true);
-}
-
-void AuthSessionFix::Hook_ClientActive( CPlayerSlot slot, bool bLoadGame, const char *pszName, uint64 xuid )
-{
-	META_CONPRINTF( "Hook_ClientActive(%d, %d, \"%s\", %d)\n", slot, bLoadGame, pszName, xuid );
-}
-
-void AuthSessionFix::Hook_ClientCommand( CPlayerSlot slot, const CCommand &args )
-{
-	META_CONPRINTF( "Hook_ClientCommand(%d, \"%s\")\n", slot, args.GetCommandString() );
-}
-
-void AuthSessionFix::Hook_ClientSettingsChanged( CPlayerSlot slot )
-{
-	META_CONPRINTF( "Hook_ClientSettingsChanged(%d)\n", slot );
-}
-
-void AuthSessionFix::Hook_OnClientConnected( CPlayerSlot slot, const char *pszName, uint64 xuid, const char *pszNetworkID, const char *pszAddress, bool bFakePlayer )
-{
-	META_CONPRINTF( "Hook_OnClientConnected(%d, \"%s\", %d, \"%s\", \"%s\", %d)\n", slot, pszName, xuid, pszNetworkID, pszAddress, bFakePlayer );
-}
-
-bool AuthSessionFix::Hook_ClientConnect( CPlayerSlot slot, const char *pszName, uint64 xuid, const char *pszNetworkID, bool unk1, CBufferString *pRejectReason )
-{
-	META_CONPRINTF( "Hook_ClientConnect(%d, \"%s\", %d, \"%s\", %d, \"%s\")\n", slot, pszName, xuid, pszNetworkID, unk1, pRejectReason->ToGrowable()->Get() );
-
-	RETURN_META_VALUE(MRES_IGNORED, true);
-}
-
-void AuthSessionFix::Hook_ClientPutInServer( CPlayerSlot slot, char const *pszName, int type, uint64 xuid )
-{
-	META_CONPRINTF( "Hook_ClientPutInServer(%d, \"%s\", %d, %d)\n", slot, pszName, type, xuid );
-}
-
-void AuthSessionFix::Hook_ClientDisconnect( CPlayerSlot slot, ENetworkDisconnectionReason reason, const char *pszName, uint64 xuid, const char *pszNetworkID )
-{
-	META_CONPRINTF( "Hook_ClientDisconnect(%d, %d, \"%s\", %d, \"%s\")\n", slot, reason, pszName, xuid, pszNetworkID );
-}
-
-void AuthSessionFix::Hook_GameFrame( bool simulating, bool bFirstTick, bool bLastTick )
-{
-	/**
-	 * simulating:
-	 * ***********
-	 * true  | game is ticking
-	 * false | game is not ticking
-	 */
-}
-
-void AuthSessionFix::OnLevelInit( char const *pMapName,
-									 char const *pMapEntities,
-									 char const *pOldLevel,
-									 char const *pLandmarkName,
-									 bool loadGame,
-									 bool background )
-{
-	META_CONPRINTF("OnLevelInit(%s)\n", pMapName);
 }
 
 void AuthSessionFix::OnLevelShutdown()
 {
-	META_CONPRINTF("OnLevelShutdown()\n");
 }
 
 bool AuthSessionFix::Pause(char *error, size_t maxlen)
