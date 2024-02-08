@@ -1,3 +1,6 @@
+# AuthSessionFix / Player count bug fix
+Since the kilowatt update the dedicated servers stopped properly calling EndAuthSession on client disconnect which would cause the player count to not go down in the A2S responses (server browser), this plugin aims to fix that by hooking NotifyClientDisconnect and calling EndAuthSession manually.
+
 ## Manual building example
 
 ### Prerequisites
@@ -22,7 +25,7 @@
  * If the process of configuring was successful, you should be able to run ``ambuild`` in the ``\build`` folder to compile the plugin.
  * Once the plugin is compiled the files would be packaged and placed in ``\build\package`` folder.
  * To run the plugin on the server, place the files preserving the layout provided in ``\package``. Be aware that plugins get loaded either by corresponding ``.vdf`` files (automatic step) in the metamod folder, or by listing them in ``addons/metamod/metaplugins.ini`` file (manual step).
- 
+
  ## Points of interest
  * To generate the VS solution of the plugin with the correct setup, use ``python3 ../configure {CONFIGURE_OPTIONS} --gen=vs``, where ``{CONFIGURE_OPTIONS}`` is your default configuring options that are used when building. As a result ``.vcxproj`` file would be created in the folder where the command was executed.
  * To update which ``.cpp`` files gets compiled in or to add new ones, look at ``AMBuilder`` script which has the ``sample_mm.cpp`` being built initially, you can add or edit this however you want to, running ``ambuild`` after editing this script would automatically catch up the changes, no need for the reconfiguration.
@@ -35,4 +38,3 @@
 ## For more information on compiling and reading the plugin's source code, see:
 
 	http://wiki.alliedmods.net/Category:Metamod:Source_Development
-
