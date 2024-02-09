@@ -77,16 +77,18 @@ bool AuthSessionFix::Load(PluginId id, ISmmAPI *ismm, char *error, size_t maxlen
 #endif
 	g_pNotifyClientDisconnect = (NotifyClientDisconnect_t)serverModule->FindSignature((byte*)sig, sizeof(sig)-1, err);
 
+	if (err)
+	{
+		META_CONPRINTF("[AuthSessionFix] Failed to find signature: %i\n", err);
+		V_snprintf(error, maxlen, "[AuthSessionFix] Failed to find signature: %i\n", err);
+		return false;
+	}
+
 	auto g_hook = funchook_create();
 	funchook_prepare(g_hook, (void**)&g_pNotifyClientDisconnect, (void*)Hook_NotifyClientDisconnect);
 	funchook_install(g_hook, 0);
 
-	if (err)
-	{
-		META_CONPRINTF("Failed to find signature: %d\n", err);
-	}
-
-	META_CONPRINTF( "All hooks started!\n" );
+	META_CONPRINTF( "AuthSessionFix started!\n" );
 
 	g_pCVar = icvar;
 	ConVar_Register( FCVAR_RELEASE | FCVAR_CLIENT_CAN_EXECUTE | FCVAR_GAMEDLL );
@@ -99,8 +101,11 @@ bool AuthSessionFix::Unload(char *error, size_t maxlen)
 	SH_REMOVE_HOOK(IServerGameDLL, GameServerSteamAPIActivated, g_pSource2Server, SH_MEMBER(this, &AuthSessionFix::Hook_GameServerSteamAPIActivated), false);
 	SH_REMOVE_HOOK(IServerGameDLL, GameServerSteamAPIDeactivated, g_pSource2Server, SH_MEMBER(this, &AuthSessionFix::Hook_GameServerSteamAPIDeactivated), false);
 
-	funchook_uninstall(g_hook, 0);
-	funchook_destroy(g_hook);
+	if (g_hook)
+	{
+		funchook_uninstall(g_hook, 0);
+		funchook_destroy(g_hook);
+	}
 
 	return true;
 }
